@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  phone     String?
+  createdAt DateTime @default(now())
+  lastOrderAt DateTime?
+  totalSpent Float   @default(0)
+  orderCount Int     @default(0)
+  segment   String?
+  
+  orders    Order[]
+  
+  @@index([email])
+  @@index([segment])
+  @@index([lastOrderAt])
+}
+
+model Order {
+  id         String   @id @default(cuid())
+  customerId String
+  amount     Float
+  category   String
+  createdAt  DateTime @default(now())
+  
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  
+  @@index([customerId])
+  @@index([category])
+  @@index([createdAt])
+}
+
+model Campaign {
+  id          String   @id @default(cuid())
+  name        String
+  goal        String
+  status      String   @default("draft")
+  
+  opportunity Json
+  audience    Json
+  strategy    Json
+  content     Json
+  
+  createdAt   DateTime @default(now())
+  launchedAt  DateTime?
+  
+  events      CampaignEvent[]
+  
+  @@index([status])
+  @@index([createdAt])
+}
+
+model CampaignEvent {
+  id         String   @id @default(cuid())
+  campaignId String
+  customerId String?
+  type       String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  
+  @@index([campaignId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model Segment {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  criteria    Json
+  customerIds String[]
+  createdAt   DateTime @default(now())
+  
+  @@index([name])
+}

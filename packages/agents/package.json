@@ -1,0 +1,14 @@
+{
+  "name": "@repo/agents",
+  "version": "1.0.0",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {},
+  "dependencies": {
+    "@repo/types": "workspace:*",
+    "@repo/db": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}
