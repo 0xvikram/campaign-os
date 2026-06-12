@@ -16,6 +16,10 @@ export class GroqClient {
   }
 
   async complete(prompt: string, systemPrompt?: string): Promise<string> {
+    if (!this.apiKey || this.apiKey === 'your_groq_api_key_here') {
+      throw new Error('GROQ_API_KEY not configured. Set it in apps/api/.env');
+    }
+
     const messages = [];
     
     if (systemPrompt) {
@@ -39,7 +43,9 @@ export class GroqClient {
     });
 
     if (!response.ok) {
-      throw new Error(`Groq API error: ${response.statusText}`);
+      const errorText = await response.text();
+      console.error('Groq API Error:', errorText);
+      throw new Error(`Groq API error (${response.status}): ${errorText}`);
     }
 
     const data: GroqResponse = await response.json();

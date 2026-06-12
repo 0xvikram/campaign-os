@@ -31,10 +31,10 @@ const orchestrator = new AgentOrchestrator(
 // CORS
 app.addHook('onRequest', async (request, reply) => {
   reply.header('Access-Control-Allow-Origin', '*');
-  reply.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  reply.header('Access-Control-Allow-Headers', 'Content-Type');
+  reply.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
+  reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (request.method === 'OPTIONS') {
-    reply.send();
+    reply.status(200).send();
   }
 });
 
@@ -97,22 +97,50 @@ app.post('/campaigns/:id/launch', async (request, reply) => {
   // Trigger channel service
   const channelServiceUrl = process.env.CHANNEL_SERVICE_URL || 'http://localhost:3001';
   
+  // Create immediate SENT event for the first customer to show instant feedback
+  const customerIds = campaign.audience.customerIds || [];
+  if (customerIds.length > 0) {
+    try {
+      const { createCampaignEvent } = await import('@repo/db');
+      await createCampaignEvent({
+        campaignId: id,
+        customerId: customerIds[0],
+        type: 'SENT',
+        metadata: { channel: campaign.strategy.channel, timestamp: new Date() },
+      });
+    } catch (err) {
+      request.log.error('Failed to create initial event:', err);
+    }
+  }
+  
   try {
-    await fetch(`${channelServiceUrl}/send`, {
+    const channelResponse = await fetch(`${channelServiceUrl}/send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         campaignId: id,
         channel: campaign.strategy.channel,
-        customerIds: campaign.audience.customerIds,
+        customerIds,
         content: campaign.content,
       }),
     });
+
+    if (!channelResponse.ok) {
+      throw new Error(`Channel service returned ${channelResponse.status}`);
+    }
+
+    return { 
+      success: true, 
+      campaignId: id,
+      message: 'Campaign launched successfully. Events are being generated.'
+    };
   } catch (error) {
     request.log.error('Failed to trigger channel service:', error);
+    return reply.code(503).send({ 
+      error: 'Campaign launched but channel service is unavailable. Please ensure the channel service is running on port 3001.',
+      hint: 'Run the channel service with: pnpm run dev --filter=channel-service'
+    });
   }
-
-  return { success: true, campaignId: id };
 });
 
 // Get campaign analytics
@@ -230,6 +258,171 @@ app.get('/campaigns', async (request, reply) => {
   });
   
   return campaigns;
+});
+
+// Get customers list
+app.get('/customers', async (request, reply) => {
+  const customers = await prisma.customer.findMany({
+    orderBy: { createdAt: 'desc' },
+  });
+  return customers;
+});
+
+// Get orders list
+app.get('/orders', async (request, reply) => {
+  const orders = await prisma.order.findMany({
+    orderBy: { createdAt: 'desc' },
+    include: { customer: true },
+  });
+  return orders;
+});
+
+// Reset and seed database
+app.post('/data/seed', async (request, reply) => {
+  try {
+    console.log('🌱 Starting database seed...');
+    
+    // Clear existing data
+    await prisma.campaignEvent.deleteMany();
+    await prisma.campaign.deleteMany();
+    await prisma.segment.deleteMany();
+    await prisma.order.deleteMany();
+    await prisma.customer.deleteMany();
+
+    const now = new Date();
+    const sixMonthsAgo = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+    const CATEGORIES = ['Footwear', 'Apparel', 'Accessories', 'Electronics', 'Home'];
+
+    function randomDate(start: Date, end: Date): Date {
+      return new Date(start.getTime() + Math.random() * (end.getTime() - start.getTime()));
+    }
+
+    // Create 500 customers with varying behavior
+    console.log('Creating 500 customers...');
+    const customers = [];
+    for (let i = 0; i < 500; i++) {
+      const customer = await prisma.customer.create({
+        data: {
+          email: `customer${i}@example.com`,
+          name: `Customer ${i}`,
+          phone: `+91${9000000000 + i}`,
+          createdAt: randomDate(sixMonthsAgo, now),
+        },
+      });
+      customers.push(customer);
+    }
+
+    console.log('✅ Created 500 customers');
+
+    // Create orders with different patterns
+    let orderCount = 0;
+
+    for (const customer of customers) {
+      const customerType = Math.random();
+      
+      // 30% VIP customers (high frequency, high value, active)
+      if (customerType < 0.3) {
+        const orders = Math.floor(Math.random() * 10) + 5;
+        for (let j = 0; j < orders; j++) {
+          await prisma.order.create({
+            data: {
+              customerId: customer.id,
+              amount: Math.floor(Math.random() * 5000) + 1000,
+              category: CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)],
+              createdAt: randomDate(new Date(customer.createdAt), now),
+            },
+          });
+          orderCount++;
+        }
+      }
+      // 25% Dormant customers (purchased before, but 60-90 days ago)
+      else if (customerType < 0.55) {
+        const orders = Math.floor(Math.random() * 3) + 2;
+        const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+        for (let j = 0; j < orders; j++) {
+          await prisma.order.create({
+            data: {
+              customerId: customer.id,
+              amount: Math.floor(Math.random() * 3000) + 500,
+              category: j === 0 ? 'Footwear' : CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)],
+              createdAt: randomDate(ninetyDaysAgo, sixtyDaysAgo),
+            },
+          });
+          orderCount++;
+        }
+      }
+      // 25% Churn risk (100+ days inactive, but was active)
+      else if (customerType < 0.8) {
+        const orders = Math.floor(Math.random() * 4) + 3;
+        const threeMonthsAgo = new Date(now.getTime() - 100 * 24 * 60 * 60 * 1000);
+        for (let j = 0; j < orders; j++) {
+          await prisma.order.create({
+            data: {
+              customerId: customer.id,
+              amount: Math.floor(Math.random() * 2000) + 300,
+              category: CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)],
+              createdAt: randomDate(new Date(customer.createdAt), threeMonthsAgo),
+            },
+          });
+          orderCount++;
+        }
+      }
+      // 20% Active recent customers
+      else {
+        const orders = Math.floor(Math.random() * 5) + 2;
+        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        for (let j = 0; j < orders; j++) {
+          await prisma.order.create({
+            data: {
+              customerId: customer.id,
+              amount: Math.floor(Math.random() * 1500) + 200,
+              category: CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)],
+              createdAt: randomDate(thirtyDaysAgo, now),
+            },
+          });
+          orderCount++;
+        }
+      }
+    }
+
+    console.log(`✅ Created ${orderCount} orders`);
+
+    // Update customer aggregates
+    const allCustomers = await prisma.customer.findMany({
+      include: { orders: true },
+    });
+
+    for (const customer of allCustomers) {
+      const totalSpent = customer.orders.reduce((sum, order) => sum + order.amount, 0);
+      const lastOrder = customer.orders.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+
+      await prisma.customer.update({
+        where: { id: customer.id },
+        data: {
+          totalSpent,
+          orderCount: customer.orders.length,
+          lastOrderAt: lastOrder?.createdAt,
+        },
+      });
+    }
+
+    console.log('✅ Updated customer aggregates');
+    
+    // Get final counts
+    const finalCustomerCount = await prisma.customer.count();
+    const finalOrderCount = await prisma.order.count();
+    
+    console.log(`🎉 Seeding complete! ${finalCustomerCount} customers, ${finalOrderCount} orders`);
+
+    return { 
+      success: true, 
+      message: `Database seeded successfully with ${finalCustomerCount} customers and ${finalOrderCount} orders` 
+    };
+  } catch (error: any) {
+    request.log.error(error);
+    return reply.code(500).send({ error: error.message });
+  }
 });
 
 // Health check

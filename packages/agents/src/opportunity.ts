@@ -11,6 +11,9 @@ export class OpportunityAgent implements Agent<OpportunityResult> {
     const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
 
+    const totalCustomers = await prisma.customer.count();
+    console.log(`🔍 OpportunityAgent analyzing ${totalCustomers} total customers`);
+
     const opportunities = [];
 
     // Dormant customers (45-90 days since last order)
@@ -25,6 +28,7 @@ export class OpportunityAgent implements Agent<OpportunityResult> {
 
     if (dormantCustomers.length > 0) {
       const estimatedRevenue = dormantCustomers.reduce((sum, c) => sum + c.totalSpent / c.orderCount, 0);
+      console.log(`✅ Found ${dormantCustomers.length} dormant customers (45-90 days inactive)`);
       opportunities.push({
         type: 'DORMANT_CUSTOMERS',
         description: `Customers who haven't purchased in 45-90 days`,
