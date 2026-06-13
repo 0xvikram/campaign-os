@@ -150,7 +150,7 @@ export default function CampaignAnalyticsPage({ params }: { params: Promise<{ id
             <h1 style={{ fontSize: '26px', fontWeight: 700 }}>{campaignName}</h1>
           </div>
           <button
-            onClick={() => router.push(`/campaign/${params.id}`)}
+            onClick={() => router.push(`/campaign/${id}`)}
             style={{
               background: 'rgba(255,255,255,0.03)',
               color: 'var(--text-muted)',

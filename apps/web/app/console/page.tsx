@@ -79,15 +79,27 @@ export default function ConsoleDashboard() {
   // Fetch customer/order data
   const fetchCustomerData = async () => {
     setLoadingData(true);
+    setError('');
     try {
       const cRes = await fetch('http://localhost:3000/customers');
       const oRes = await fetch('http://localhost:3000/orders');
-      if (cRes.ok && oRes.ok) {
-        setCustomers(await cRes.json());
-        setOrders(await oRes.json());
+      
+      if (cRes.ok) {
+        const customerData = await cRes.json();
+        setCustomers(customerData);
+      } else {
+        setError('Failed to load customers. Check if API server is running on port 3000.');
+      }
+      
+      if (oRes.ok) {
+        const orderData = await oRes.json();
+        setOrders(orderData);
+      } else {
+        setError(prev => prev ? prev + ' Orders also failed.' : 'Failed to load orders.');
       }
     } catch (err) {
       console.error(err);
+      setError('Cannot connect to API server. Make sure it\'s running: pnpm run dev --filter=api');
     } finally {
       setLoadingData(false);
     }
@@ -871,6 +883,50 @@ export default function ConsoleDashboard() {
 
             {loadingData ? (
               <p style={{ color: 'var(--text-muted)' }}>Querying database layer...</p>
+            ) : customers.length === 0 && orders.length === 0 ? (
+              <div style={{ 
+                padding: '60px 20px', 
+                textAlign: 'center', 
+                border: '1px dashed var(--border-slate)', 
+                borderRadius: '8px',
+                background: 'rgba(255,255,255,0.01)'
+              }}>
+                <p style={{ fontSize: '36px', marginBottom: '16px' }}>📭</p>
+                <p style={{ fontSize: '16px', fontWeight: 600, marginBottom: '8px', color: 'var(--text-white)' }}>No data loaded</p>
+                <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                  Database may be empty or API server not responding
+                </p>
+                <button
+                  onClick={fetchCustomerData}
+                  style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    color: 'var(--text-white)',
+                    padding: '8px 16px',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    marginRight: '8px'
+                  }}
+                >
+                  🔄 Retry Loading
+                </button>
+                <button
+                  onClick={handleSeedData}
+                  style={{
+                    background: 'var(--gradient-primary)',
+                    border: 'none',
+                    color: '#000',
+                    padding: '8px 16px',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  🌱 Seed Demo Data
+                </button>
+              </div>
             ) : (
               <>
                 <div style={{ overflowX: 'auto', background: 'rgba(2, 6, 23, 0.4)', border: '1px solid var(--border-slate)', borderRadius: '8px' }}>

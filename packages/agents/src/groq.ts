@@ -37,7 +37,7 @@ export class GroqClient {
       body: JSON.stringify({
         model: this.model,
         messages,
-        temperature: 0.7,
+        temperature: 0.9,
         max_tokens: 2000,
       }),
     });

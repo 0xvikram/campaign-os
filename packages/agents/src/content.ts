@@ -15,7 +15,22 @@ export class ContentAgent implements Agent<ContentResult> {
       throw new Error('Full context required for content generation');
     }
 
-    const systemPrompt = `You are a campaign copywriter. Create compelling, personalized campaign content.
+    const oppType = context.opportunity.opportunities[0].type;
+    const channel = context.strategy.channel;
+    const offer = context.strategy.offer;
+
+    const systemPrompt = `You are a campaign copywriter who creates DISTINCTLY DIFFERENT content based on customer segment and channel.
+
+TONE RULES BY OPPORTUNITY:
+- DORMANT/CHURN: Warm, apologetic, "we miss you" tone with urgency
+- VIP: Exclusive, premium, "you deserve this" tone
+- FREQUENT: Rewarding, appreciative, "thank you for loyalty" tone  
+- CATEGORY: Curious, product-focused, "check out what's new" tone
+
+STYLE RULES BY CHANNEL:
+- WhatsApp: Conversational, emoji-friendly, under 150 chars, personal
+- Email: Structured, visual descriptions, storytelling, 100-150 words
+- Push: Ultra-short, urgent, action-focused, under 50 chars
 
 You must respond with valid JSON in exactly this format:
 {
@@ -30,32 +45,57 @@ You must respond with valid JSON in exactly this format:
   "reasoning": "why this content approach was chosen"
 }`;
 
-    const prompt = `Create campaign content based on this strategy:
+    const prompt = `Create UNIQUE campaign content for ${oppType} segment via ${channel}.
 
 BUSINESS GOAL: ${context.goal}
+
+OPPORTUNITY TYPE: ${oppType}
+Description: ${context.opportunity.opportunities[0].description}
 
 AUDIENCE:
 - Type: ${context.segment.name}
 - Size: ${context.segment.customerCount} customers
-- Context: ${context.segment.reasoning}
+- Behavior: ${context.segment.reasoning}
 
 STRATEGY:
-- Channel: ${context.strategy.channel}
+- Channel: ${channel}
 - Timing: ${context.strategy.timing}
-- Offer: ${context.strategy.offer}
+- Offer: ${offer}
 - Structure: ${context.strategy.structure}
 
-OPPORTUNITY:
-${context.opportunity.opportunities[0].description}
+CONTENT REQUIREMENTS FOR ${oppType}:
 
-Create engaging, personalized content that:
-1. Addresses the customer's specific situation (dormant, VIP, etc.)
-2. Presents the offer compellingly
-3. Includes clear call-to-action
-4. Uses appropriate tone for the channel (casual for WhatsApp, professional for Email, urgent for Push)
-5. Includes personalization tokens like {name}, {offerAmount}
+${oppType === 'DORMANT_CUSTOMERS' ? `
+TONE: Warm win-back, "We miss you!"
+MESSAGE: Acknowledge absence, entice with strong offer, create urgency
+EXAMPLE: "Hi {name} 👋 We noticed you haven't shopped in a while. Here's 25% off to welcome you back! Valid for 48 hours only. Shop now → [link]"
+` : ''}
 
-Keep WhatsApp messages under 160 characters, emails under 150 words, push notifications under 50 characters.`;
+${oppType === 'CHURN_RISK' ? `
+TONE: Apologetic, personalized, emotional
+MESSAGE: Show you value their past loyalty, major incentive to return
+EXAMPLE: "Dear {name}, We truly miss having you. As one of our valued customers, here's an exclusive 30% off your next order. Come back? 💙"
+` : ''}
+
+${oppType === 'VIP_UPSELL' ? `
+TONE: Premium, exclusive, VIP treatment
+MESSAGE: Make them feel special, offer exclusive access/products
+EXAMPLE: "Hi {name}, You're invited! As a VIP member, get early access to our new premium collection. Shop before anyone else → [link]"
+` : ''}
+
+${oppType === 'FREQUENT_BUYERS' ? `
+TONE: Appreciative, rewarding, fun
+MESSAGE: Thank them for loyalty, reward with points/perks
+EXAMPLE: "Hey {name}! 🎉 You're crushing it! As a thank you, enjoy 2X loyalty points on your next order. Keep it going! → [link]"
+` : ''}
+
+${oppType === 'CATEGORY_DROPOFF' ? `
+TONE: Friendly, product-focused, "new arrivals"
+MESSAGE: Show relevant new products in their favorite category
+EXAMPLE: "Hi {name} 👟 New footwear just dropped! Check out fresh styles in your favorite category. Plus 15% off → [link]"
+` : ''}
+
+Create content that feels COMPLETELY DIFFERENT from other opportunity types. Match the tone, urgency, and offer presentation to the behavioral segment.`;
 
     const response = await this.groq.completeJSON<ContentResult>(prompt, systemPrompt);
     return response;

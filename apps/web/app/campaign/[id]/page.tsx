@@ -55,7 +55,7 @@ export default function CampaignWorkspacePage({ params }: { params: Promise<{ id
         return;
       }
       
-      router.push(`/analytics/${params.id}`);
+      router.push(`/analytics/${id}`);
     } catch (err) {
       console.error(err);
       alert('Failed to launch campaign. Make sure the API server is running on port 3000.');
